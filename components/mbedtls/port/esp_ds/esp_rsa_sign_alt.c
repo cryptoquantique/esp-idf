@@ -429,7 +429,7 @@ static int rsa_rsassa_pss_pkcs1_v21_encode(mbedtls_rsa_context *ctx,
         return ret;
     }
 
-    msb = 3071;//mbedtls_mpi_bitlen(&ctx->N) - 1;
+    msb = dst_len*8 -1;//mbedtls_mpi_bitlen(&ctx->N) - 1;
     sig[0] &= 0xFF >> (olen * 8 - msb);
 
     p += hlen;
