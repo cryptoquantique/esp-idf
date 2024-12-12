@@ -1149,15 +1149,6 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
     /* initialize the mbedtls pk context with rsa context */
     mbedtls_rsa_context rsakey;
     mbedtls_rsa_init(&rsakey);
-#ifdef	CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-    if ((ret = mbedtls_pk_setup_rsa_pss(((const esp_tls_pki_t*)pki)->pk_key, &rsakey, NULL, esp_ds_rsa_sign,
-                                        esp_ds_get_keylen )) != 0) {
-        ESP_LOGE(TAG, "Error in mbedtls_pk_setup_rsa_pss, returned -0x%04X", -ret);
-        mbedtls_print_error_msg(ret);
-        ret = ESP_FAIL;
-        goto exit;
-    }
-#else
     if ((ret = mbedtls_pk_setup_rsa_alt(((const esp_tls_pki_t*)pki)->pk_key, &rsakey, NULL, esp_ds_rsa_sign,
                                         esp_ds_get_keylen )) != 0) {
         ESP_LOGE(TAG, "Error in mbedtls_pk_setup_rsa_alt, returned -0x%04X", -ret);
@@ -1165,7 +1156,6 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
         ret = ESP_FAIL;
         goto exit;
     }
-#endif
     ret = esp_ds_init_data_ctx(((const esp_tls_pki_t*)pki)->esp_ds_data);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize DS parameters from nvs");
