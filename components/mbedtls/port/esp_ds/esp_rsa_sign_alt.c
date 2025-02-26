@@ -377,11 +377,11 @@ static int rsa_rsassa_pss_pkcs1_v21_encode(mbedtls_rsa_context *ctx,
     if (saltlen == MBEDTLS_RSA_SALT_LEN_ANY) {
         /* Calculate the largest possible salt length, up to the hash size.
          * Normally this is the hash length, which is the maximum salt length
-         * according to FIPS 185-4 §5.5 (e) and common practice. If there is not
+         * according to FIPS 185-4 ï¿½5.5 (e) and common practice. If there is not
          * enough room, use the maximum salt length that fits. The constraint is
          * that the hash length plus the salt length plus 2 bytes must be at most
-         * the key length. This complies with FIPS 186-4 §5.5 (e) and RFC 8017
-         * (PKCS#1 v2.2) §9.1.1 step 3. */
+         * the key length. This complies with FIPS 186-4 ï¿½5.5 (e) and RFC 8017
+         * (PKCS#1 v2.2) ï¿½9.1.1 step 3. */
         min_slen = hlen - 2;
         if (olen < hlen + min_slen + 2) {
             return MBEDTLS_ERR_RSA_BAD_INPUT_DATA;
@@ -445,7 +445,7 @@ static int rsa_rsassa_pkcs1_v21_encode( mbedtls_rsa_context *ctx,
                                         size_t dst_len,
                                         unsigned char *dst )
 {
-	return rsa_rsassa_pss_pkcs1_v21_encode(ctx,f_rng ,p_rng,md_alg, hashlen, hash,MBEDTLS_RSA_SALT_LEN_ANY,dst, dst_len);
+	return rsa_rsassa_pss_pkcs1_v21_encode(ctx, f_rng, p_rng, md_alg, hashlen, hash, MBEDTLS_RSA_SALT_LEN_ANY, dst, dst_len);
 }
 
 int esp_ds_rsa_sign( void *ctx,
@@ -461,19 +461,28 @@ int esp_ds_rsa_sign( void *ctx,
         ESP_LOGE(TAG, "Could not allocate memory for internal DS operations");
         return -1;
     }
-#ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-    if ((ret = (rsa_rsassa_pkcs1_v21_encode( ctx,f_rng ,p_rng, md_alg, hashlen, hash, ((s_ds_data->rsa_length + 1) * FACTOR_KEYLEN_IN_BYTES), sig ))) != 0) {
-		ESP_LOGE(TAG, "Error in pkcs1_v21 encoding, returned %d", ret);
-        heap_caps_free(signature);
-        return -1;
+    mbedtls_pk_context *pk = (mbedtls_pk_context *)ctx;
+    mbedtls_pk_type_t type = mbedtls_pk_get_type(pk);
+    ESP_LOGD(TAG, "Using PK type %u (%s)", type, mbedtls_pk_get_name(pk));
+    
+    // When having to fallback from TLS1.3 to TLS1.2, the RSA key type seems to not be setup properly
+    // and this allows us to differentiate between the two protocols.
+    if (type == MBEDTLS_PK_RSA_ALT) {  // TLS1.3
+        ESP_LOGD(TAG, "Using PKCS1 v2.1 encoding");
+        if ((ret = (rsa_rsassa_pkcs1_v21_encode(ctx, f_rng, p_rng, md_alg, hashlen, hash, ((s_ds_data->rsa_length + 1) * FACTOR_KEYLEN_IN_BYTES), sig ))) != 0) {
+            ESP_LOGE(TAG, "Error in pkcs1_v21 encoding, returned %d", ret);
+            heap_caps_free(signature);
+            return -1;
+        }
+    } 
+    else { // TLS1.2
+        ESP_LOGD(TAG, "Using PKCS1 v1.5 encoding");
+        if ((ret = (rsa_rsassa_pkcs1_v15_encode(md_alg, hashlen, hash, ((s_ds_data->rsa_length + 1) * FACTOR_KEYLEN_IN_BYTES), sig ))) != 0) {
+            ESP_LOGE(TAG, "Error in pkcs1_v15 encoding, returned %d", ret);
+            heap_caps_free(signature);
+            return -1;
+        }
     }
-#else	
-    if ((ret = (rsa_rsassa_pkcs1_v15_encode( md_alg, hashlen, hash, ((s_ds_data->rsa_length + 1) * FACTOR_KEYLEN_IN_BYTES), sig ))) != 0) {
-        ESP_LOGE(TAG, "Error in pkcs1_v15 encoding, returned %d", ret);
-        heap_caps_free(signature);
-        return -1;
-    }
-#endif
 
     for (unsigned int i = 0; i < (s_ds_data->rsa_length + 1); i++) {
         signature[i] = SWAP_INT32(((uint32_t *)sig)[(s_ds_data->rsa_length + 1) - (i + 1)]);
